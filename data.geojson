@@ -1,0 +1,26 @@
+{
+  features: [{
+  geometry: {
+    coordinates: [-122.4194, 37.7749],
+    type: "Point"
+  },
+  properties: {
+    description: "Description of news article 1",
+    source: "Source 1",
+    title: "News Article 1"
+  },
+  type: "Feature"
+}, {
+  geometry: {
+    coordinates: [-118.2437, 34.0522],
+    type: "Point"
+  },
+  properties: {
+    description: "Description of news article 2",
+    source: "Source 2",
+    title: "News Article 2"
+  },
+  type: "Feature"
+}],
+  type: "FeatureCollection"
+}
