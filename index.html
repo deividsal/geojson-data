@@ -1,21 +1,208 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>GeoJSON Map</title>
-  <sc<script src="https://maps.googleapis.com/maps/api/js?key=9f13c339f2e3d96"></script
-ript>
-  // Replace 'YOUR_API_KEY' with your actual Google Maps API key
-  function initMap() {
-    var map = new google.maps.Map(document.getElementById('map'), {
-      center: {lat: 0, lng: 0},
-      zoom: 2
-    });
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Global Live Earthquake Map</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-sA+e2IfY7BqU2s4poZ7Ze32AO5GpW7Nt5w5vZ2T730w="
+    crossorigin=""
+  />
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
 
-    map.data.loadGeoJson('https://deividsal.github.io/geojson-data/data.geojson');
-  }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
 
+    header {
+      padding: 1rem 1.5rem;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      text-align: center;
+    }
+
+    main {
+      flex: 1;
+      position: relative;
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+
+    .status {
+      position: absolute;
+      top: 1rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 0.6rem 1rem;
+      border-radius: 999px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+      font-size: 0.9rem;
+      display: none;
+      z-index: 1000;
+    }
+
+    .legend {
+      position: absolute;
+      bottom: 1rem;
+      right: 1rem;
+      background: rgba(255, 255, 255, 0.9);
+      padding: 0.75rem;
+      border-radius: 0.5rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      line-height: 1.4;
+      font-size: 0.85rem;
+    }
+
+    .legend h3 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .legend-swatch {
+      width: 1rem;
+      height: 1rem;
+      border-radius: 50%;
+    }
+
+    a {
+      color: inherit;
+    }
+  </style>
 </head>
-<body onload="initMap()">
-  <div id="map" style="height: 100vh; width: 100%;"></div>
+<body>
+  <header>
+    <h1>Live Earthquake Activity (Past 24 Hours)</h1>
+    <p>Data provided by the <a href="https://earthquake.usgs.gov/" target="_blank" rel="noreferrer">USGS Earthquake Hazards Program</a>.</p>
+  </header>
+  <main>
+    <div id="map" role="region" aria-label="Interactive map of global earthquakes"></div>
+    <div class="status" id="statusMessage" role="status" aria-live="polite"></div>
+    <div class="legend" aria-hidden="true">
+      <h3>Magnitude</h3>
+      <div class="legend-item"><span class="legend-swatch" style="background:#2ECC71"></span> < 2.5</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#F1C40F"></span> 2.5 – 4.5</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#E67E22"></span> 4.5 – 6.0</div>
+      <div class="legend-item"><span class="legend-swatch" style="background:#E74C3C"></span> > 6.0</div>
+    </div>
+  </main>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-o9N1j7kGIC2J7hDju6kSg32JTK/kB8HkS1J9GT2f0Z8="
+    crossorigin=""
+  ></script>
+  <script>
+    const map = L.map('map', {
+      worldCopyJump: true
+    }).setView([20, 0], 2);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    const statusMessage = document.getElementById('statusMessage');
+
+    const magnitudeColor = (magnitude) => {
+      if (magnitude >= 6) return '#E74C3C';
+      if (magnitude >= 4.5) return '#E67E22';
+      if (magnitude >= 2.5) return '#F1C40F';
+      return '#2ECC71';
+    };
+
+    const magnitudeRadius = (magnitude) => {
+      return Math.max(4, magnitude * 4);
+    };
+
+    const formatTime = (timestamp) => {
+      return new Date(timestamp).toLocaleString(undefined, {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZoneName: 'short'
+      });
+    };
+
+    const feedUrl = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson';
+
+    const showStatus = (message, isError = false) => {
+      statusMessage.textContent = message;
+      statusMessage.style.display = 'block';
+      statusMessage.style.backgroundColor = isError ? 'rgba(192, 57, 43, 0.9)' : 'rgba(39, 174, 96, 0.9)';
+    };
+
+    const hideStatus = () => {
+      statusMessage.style.display = 'none';
+    };
+
+    const loadEarthquakes = async () => {
+      try {
+        showStatus('Loading live earthquake data...');
+        const response = await fetch(feedUrl);
+        if (!response.ok) {
+          throw new Error(`Network response was not ok: ${response.status}`);
+        }
+        const data = await response.json();
+        const features = data.features ?? [];
+
+        if (features.length === 0) {
+          showStatus('No earthquake activity reported in the past 24 hours.', true);
+          return;
+        }
+
+        features.forEach((feature) => {
+          const [longitude, latitude, depth] = feature.geometry.coordinates;
+          const { mag, place, time, url } = feature.properties;
+
+          const marker = L.circleMarker([latitude, longitude], {
+            radius: magnitudeRadius(mag ?? 0),
+            color: '#1F2D3D',
+            weight: 1,
+            fillColor: magnitudeColor(mag ?? 0),
+            fillOpacity: 0.8
+          });
+
+          const popupContent = `
+            <strong>${mag?.toFixed(1) ?? 'N/A'} magnitude</strong><br />
+            ${place ?? 'Location unavailable'}<br />
+            Depth: ${depth?.toFixed(1) ?? 'N/A'} km<br />
+            Time: ${formatTime(time)}<br />
+            <a href="${url}" target="_blank" rel="noreferrer">More details</a>
+          `;
+
+          marker.bindPopup(popupContent);
+          marker.addTo(map);
+        });
+
+        hideStatus();
+      } catch (error) {
+        console.error(error);
+        showStatus('Unable to load live earthquake data. Please try again later.', true);
+      }
+    };
+
+    loadEarthquakes();
+  </script>
 </body>
 </html>
